@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">LuzControl</string>
+    <string name="widget_description">Precio actual de la luz y consumo de ayer</string>
+    <string name="widget_no_data">Sin datos</string>
+    <string name="sync_channel_name">Sincronización</string>
+    <string name="price_channel_name">Avisos de precio</string>
+    <string name="sync_notification_title">Sincronizando datos de consumo…</string>
+</resources>
