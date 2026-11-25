@@ -144,7 +144,20 @@ private fun DatePickerStep(title: String, initial: LocalDate, onDismiss: () -> U
 private fun ConsumptionBody(ui: ConsumptionUi) {
     androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionCard("Consumo y precio", subtitle = "${ui.rangeLabel} · ${ui.granularity.label}") {
-            BarLineChart(bars = ui.bars, line = ui.priceLine)
+            val byPeriod = ui.granularity == Granularity.HOURLY || ui.granularity == Granularity.QUARTER
+            BarLineChart(
+                bars = ui.bars,
+                line = ui.priceLine,
+                barLegends = if (byPeriod) listOf(
+                    "Punta" to EnergyColors.Punta, "Llano" to EnergyColors.Llano, "Valle" to EnergyColors.Valle
+                ) else null,
+                barLegend = if (byPeriod) null else "Consumo (kWh)"
+            )
+            if (byPeriod) Text(
+                "Barras: consumo en kWh, coloreadas por periodo tarifario. Eje inferior: hora del día.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Text(
                 "Superpuesto: precio PVPC (€/kWh) para correlacionar consumo y coste.",
                 style = MaterialTheme.typography.bodySmall,
