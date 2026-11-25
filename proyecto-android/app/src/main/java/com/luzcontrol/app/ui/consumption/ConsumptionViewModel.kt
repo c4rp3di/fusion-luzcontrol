@@ -205,7 +205,12 @@ class ConsumptionViewModel @Inject constructor(
             days == 1L && points.any { it.start.atZone(zone).minute != 0 } -> {
                 // Datos de cuarto de hora (ajuste opcional): una barra por cuarto
                 val fmt = DateTimeFormatter.ofPattern("HH:mm")
-                val quarters = points.sortedBy { it.start }
+                // Eje completo del día (96 cuartos): las lecturas que falten quedan vacías en su hora real
+                val byStart = points.associateBy { it.start }
+                val dayStart = fromDate.atStartOfDay(zone)
+                val slots = (0 until (ChronoUnit.MINUTES.between(dayStart, fromDate.plusDays(1).atStartOfDay(zone)) / 15).toInt())
+                    .map { dayStart.plusMinutes(15L * it).toInstant() }
+                val quarters = slots.map { byStart[it] ?: ConsumptionPoint(it, 0.0, 0.0, false) }
                 Aggregated(
                     bars = quarters.map { q ->
                         val period = TariffCalendar.periodAt(q.start)
@@ -217,9 +222,14 @@ class ConsumptionViewModel @Inject constructor(
                 )
             }
             days <= 3 -> {
-                val hourly = points.groupBy { it.start.truncatedTo(ChronoUnit.HOURS) }
-                    .map { (h, list) -> h to list.sumOf { it.kwh } }
-                    .sortedBy { it.first }
+                val sums = points.groupBy { it.start.truncatedTo(ChronoUnit.HOURS) }
+                    .mapValues { (_, list) -> list.sumOf { it.kwh } }
+                val hourly = if (days == 1L) {
+                    // Eje completo del día: las horas sin lectura se muestran vacías
+                    val ds = fromDate.atStartOfDay(zone)
+                    val n = ChronoUnit.HOURS.between(ds, fromDate.plusDays(1).atStartOfDay(zone)).toInt()
+                    (0 until n).map { ds.plusHours(it.toLong()).toInstant().let { h -> h to (sums[h] ?: 0.0) } }
+                } else sums.map { (h, v) -> h to v }.sortedBy { it.first }
                 val fmt = DateTimeFormatter.ofPattern("dd/MM HH'h'")
                 Aggregated(
                     bars = hourly.map { (h, kwh) ->
