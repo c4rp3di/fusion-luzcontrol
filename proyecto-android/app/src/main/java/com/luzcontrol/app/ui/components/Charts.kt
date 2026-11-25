@@ -41,10 +41,20 @@ data class BarEntry(
     val value: Double,
     val color: Color? = null,
     /** Texto extra para el tooltip (p. ej. periodo tarifario). */
-    val detail: String? = null
+    val detail: String? = null,
+    /** Etiqueta corta del eje X (null = usa [label]; vacía = sin etiqueta). */
+    val axisLabel: String? = null
 )
 
 data class DonutSlice(val label: String, val value: Double, val color: Color)
+
+/** Decimales del eje según su escala, para que 0,054 no se redondee a «0,1». */
+private fun tickDecimals(max: Double): Int = when {
+    max >= 20.0 -> 0
+    max >= 2.0 -> 1
+    max >= 0.2 -> 2
+    else -> 3
+}
 
 private fun niceMax(v: Double): Double {
     if (v <= 0.0) return 1.0
@@ -68,6 +78,8 @@ fun BarLineChart(
     /** true: barras y línea comparten escala (p. ej. kW máximos frente a kW contratados). */
     sharedAxis: Boolean = false,
     barLegend: String? = null,
+    /** Leyenda de colores de las barras (p. ej. periodos tarifarios); sustituye a [barLegend]. */
+    barLegends: List<Pair<String, Color>>? = null,
     lineLegend: String? = null,
     height: Dp = 220.dp
 ) {
@@ -126,7 +138,7 @@ fun BarLineChart(
                 val frac = i / 2f
                 val y = top + h * (1f - frac)
                 drawLine(gridColor, Offset(left, y), Offset(left + w, y), strokeWidth = 1f)
-                drawText(measurer, Fmt.num(maxBar * frac, 1), Offset(2.dp.toPx(), y - 6.dp.toPx()), labelStyle)
+                drawText(measurer, Fmt.num(maxBar * frac, tickDecimals(maxBar)), Offset(2.dp.toPx(), y - 6.dp.toPx()), labelStyle)
             }
             // Barras
             val slot = w / bars.size
@@ -163,18 +175,30 @@ fun BarLineChart(
                     )
                 }
             }
-            // Etiquetas del eje X
-            val step = max(1, ceil(bars.size / 6.0).toInt())
+            // Etiquetas del eje X: centradas bajo cada barra, con el ancho medido para que nunca se pisen
+            val gap = 2.dp.toPx()
+            var lastEnd = left - gap
             bars.forEachIndexed { i, b ->
-                if (i % step == 0) {
-                    drawText(measurer, b.label, Offset(left + slot * i, top + h + 4.dp.toPx()), labelStyle)
+                val text = b.axisLabel ?: b.label
+                if (text.isNotEmpty()) {
+                    val layout = measurer.measure(text, labelStyle)
+                    val width = layout.size.width.toFloat()
+                    val x = (left + slot * i + slot / 2f - width / 2f).coerceIn(left, max(left, left + w - width))
+                    if (x >= lastEnd + gap) {
+                        drawText(layout, topLeft = Offset(x, top + h + 4.dp.toPx()))
+                        lastEnd = x + width
+                    }
                 }
             }
         }
-        if (hasLine) {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                LegendDot(barColor, barLegend ?: "Consumo ($barUnit)")
-                LegendDot(lineColor, lineLegend ?: "Precio ($lineUnit)")
+        if (hasLine || barLegends != null) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (barLegends != null) barLegends.forEach { (name, color) -> LegendDot(color, name) }
+                else LegendDot(barColor, barLegend ?: "Consumo ($barUnit)")
+                if (hasLine) LegendDot(lineColor, lineLegend ?: "Precio ($lineUnit)")
             }
         }
     }
