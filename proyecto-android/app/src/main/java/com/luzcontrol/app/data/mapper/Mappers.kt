@@ -71,9 +71,8 @@ fun DatadisContractDto.toEntity(fallbackCups: String): ContractEntity {
 }
 
 /**
- * Convierte la curva de carga horaria de Datadis. Los valores de un mismo día se ordenan por hora y
- * el instante de inicio se calcula como "inicio del día + índice × paso" sobre ZonedDateTime, así los
- * días de cambio de hora (23 / 25 horas) quedan correctos sin colisiones en la clave primaria.
+ * Convierte la curva de carga de Datadis. Día completo: inicio = medianoche + índice × paso (válido en
+ * días de 23/25 h). Día incompleto: se usa el campo `time` (hora de fin de intervalo) para no desplazar lecturas.
  */
 fun List<DatadisConsumptionDto>.toEntities(cups: String, zone: ZoneId, stepMinutes: Long = 60): List<ConsumptionEntity> {
     val out = ArrayList<ConsumptionEntity>(size)
@@ -84,8 +83,18 @@ fun List<DatadisConsumptionDto>.toEntities(cups: String, zone: ZoneId, stepMinut
     }
     for ((date, items) in groups) {
         val dayStart = date.atStartOfDay(zone)
-        items.sortedBy { parseMinutes(it.time.orEmpty()) }.forEachIndexed { index, dto ->
-            val start = dayStart.plus(Duration.ofMinutes(stepMinutes * index)).toInstant()
+        val sorted = items.sortedBy { parseMinutes(it.time.orEmpty()) }
+        val dayMinutes = Duration.between(dayStart, date.plusDays(1).atStartOfDay(zone)).toMinutes()
+        val fullDay = sorted.size.toLong() * stepMinutes == dayMinutes
+        sorted.forEachIndexed { index, dto ->
+            val start = if (fullDay) {
+                // Día completo: por índice (correcto en días de 23/25 h)
+                dayStart.plus(Duration.ofMinutes(stepMinutes * index)).toInstant()
+            } else {
+                // Día incompleto: la hora de Datadis es de FIN de intervalo ("10:00" = 09:00-10:00)
+                val startMin = (parseMinutes(dto.time.orEmpty()) - stepMinutes).coerceAtLeast(0)
+                dayStart.plus(Duration.ofMinutes(startMin)).toInstant()
+            }
             out += ConsumptionEntity(
                 cups = cups,
                 datetime = start.epochSecond,
