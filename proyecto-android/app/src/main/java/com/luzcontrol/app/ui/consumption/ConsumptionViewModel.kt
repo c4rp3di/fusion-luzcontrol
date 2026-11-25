@@ -209,7 +209,8 @@ class ConsumptionViewModel @Inject constructor(
                 Aggregated(
                     bars = quarters.map { q ->
                         val period = TariffCalendar.periodAt(q.start)
-                        BarEntry(q.start.atZone(zone).format(fmt), q.kwh, periodColor(period), period.label)
+                        val z = q.start.atZone(zone)
+                        BarEntry(z.format(fmt), q.kwh, periodColor(period), period.label, if (z.minute == 0) "%02d".format(z.hour) else "")
                     },
                     line = quarters.map { priceByHour[it.start.truncatedTo(ChronoUnit.HOURS)]?.pvpcEurKwh },
                     gran = Granularity.QUARTER
@@ -223,7 +224,15 @@ class ConsumptionViewModel @Inject constructor(
                 Aggregated(
                     bars = hourly.map { (h, kwh) ->
                         val period = TariffCalendar.periodAt(h)
-                        BarEntry(h.atZone(zone).format(fmt), kwh, periodColor(period), period.label)
+                        val z = h.atZone(zone)
+                        // 1 día: todas las horas (00..23). 2–3 días: cada 6 h, y la fecha a medianoche.
+                        val axis = when {
+                            days == 1L -> "%02d".format(z.hour)
+                            z.hour == 0 -> z.format(DateTimeFormatter.ofPattern("dd/MM"))
+                            z.hour % 6 == 0 -> "%02d".format(z.hour)
+                            else -> ""
+                        }
+                        BarEntry(h.atZone(zone).format(fmt), kwh, periodColor(period), period.label, axis)
                     },
                     line = hourly.map { (h, _) -> priceByHour[h]?.pvpcEurKwh },
                     gran = Granularity.HOURLY
